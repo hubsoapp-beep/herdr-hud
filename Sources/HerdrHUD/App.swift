@@ -14,14 +14,15 @@ final class BubbleView: NSView {
     override var acceptsFirstResponder: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func draw(_ dirtyRect: NSRect) {
+        let s = bounds.width/64
         NSColor(calibratedRed:0.09, green:0.10, blue:0.13, alpha:0.97).setFill()
-        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx:3, dy:3)); circle.fill()
-        NSColor(calibratedRed:0.91, green:0.72, blue:0.36, alpha:1).setStroke(); circle.lineWidth = 2; circle.stroke()
-        let attrs: [NSAttributedString.Key:Any] = [.font:NSFont.systemFont(ofSize:28, weight:.bold), .foregroundColor:NSColor(calibratedRed:0.97,green:0.79,blue:0.43,alpha:1)]
-        ("H" as NSString).draw(at:NSPoint(x:20,y:16), withAttributes:attrs)
+        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx:3*s, dy:3*s)); circle.fill()
+        NSColor(calibratedRed:0.91, green:0.72, blue:0.36, alpha:1).setStroke(); circle.lineWidth = 2*s; circle.stroke()
+        let attrs: [NSAttributedString.Key:Any] = [.font:NSFont.systemFont(ofSize:28*s, weight:.bold), .foregroundColor:NSColor(calibratedRed:0.97,green:0.79,blue:0.43,alpha:1)]
+        ("H" as NSString).draw(at:NSPoint(x:20*s,y:16*s), withAttributes:attrs)
         if count > 0 {
-            NSColor.systemGreen.setFill(); NSBezierPath(ovalIn:NSRect(x:43,y:43,width:17,height:17)).fill()
-            (String(min(count,9)) as NSString).draw(at:NSPoint(x:48,y:45),withAttributes:[.font:NSFont.systemFont(ofSize:10,weight:.bold),.foregroundColor:NSColor.black])
+            NSColor.systemGreen.setFill(); NSBezierPath(ovalIn:NSRect(x:43*s,y:43*s,width:17*s,height:17*s)).fill()
+            (String(min(count,9)) as NSString).draw(at:NSPoint(x:48*s,y:45*s),withAttributes:[.font:NSFont.systemFont(ofSize:10*s,weight:.bold),.foregroundColor:NSColor.black])
         }
     }
     override func mouseDown(with event: NSEvent) { start = NSEvent.mouseLocation; origin = window?.frame.origin ?? .zero; dragged = false }
@@ -67,16 +68,21 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     var visible = true, panelOpen = false, ready = false, polling = false
     var lastSnapshot: Row = [:], readBusy = false, selected = ""
     var promptIDs = Set<String>(), hotkeyWarning = ""
-    var opacityLabel: NSMenuItem?
     var toast: NSPanel?, toastTimer: Timer?, toastHover = false
     var shortcuts: [NSMenuItem] = []
     static let channel = Notification.Name("org.herdr.community.hud.control")
     var support: URL { FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Herdr HUD") }
-    var opacity: Double { defaults.object(forKey:"panelOpacity") == nil ? 100 : max(30,min(100,defaults.double(forKey:"panelOpacity"))) }
+    var bubbleOpacity: Double { defaults.object(forKey:"bubbleOpacity") == nil ? 100 : max(30,min(100,defaults.double(forKey:"bubbleOpacity"))) }
+    var side: CGFloat { defaults.object(forKey:"bubbleSize") == nil ? 64 : max(40,min(140,defaults.double(forKey:"bubbleSize"))) }
     func savePanelSize() { guard panel != nil else { return }; defaults.set(NSStringFromSize(panel.frame.size),forKey:"panelSize"); diagnostics() }
-    @objc func opacityDragged(_ sender: NSSlider) {
-        defaults.set(sender.doubleValue,forKey:"panelOpacity"); panel.alphaValue = CGFloat(sender.doubleValue/100)
-        opacityLabel?.title = "\(Int(sender.doubleValue))% opacity"
+    func applyOpacity() { bubble?.alphaValue = CGFloat(bubbleOpacity/100) }
+    @objc func changeOpacity(_ item: NSMenuItem) { defaults.set(Double(item.tag),forKey:"bubbleOpacity"); applyOpacity(); diagnostics() }
+    @objc func changeBubbleSize(_ item: NSMenuItem) {
+        defaults.set(Double(item.tag),forKey:"bubbleSize")
+        guard bubble != nil else { return }
+        bubble.setFrame(NSRect(origin:bubble.frame.origin,size:NSSize(width:side,height:side)),display:true)
+        bubbleView.frame = NSRect(x:0,y:0,width:side,height:side); bubbleView.needsDisplay = true
+        positionPanel(); savePosition()
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -84,7 +90,6 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         visible = defaults.object(forKey:"visible") == nil || defaults.bool(forKey:"visible")
         panel = OverlayPanel(contentRect:NSRect(origin:NSPoint(x:100,y:100),size:defaults.string(forKey:"panelSize").map(NSSizeFromString) ?? NSSize(width:940,height:650)), styleMask:[.borderless,.nonactivatingPanel,.resizable], backing:.buffered,defer:false)
         configure(panel); panel.title = "Herdr HUD Agents"; panel.minSize = NSSize(width:640,height:430)
-        panel.alphaValue = CGFloat(opacity/100)
         let config = WKWebViewConfiguration()
         config.userContentController.add(self,name:"hud")
         config.websiteDataStore = .nonPersistent()
@@ -99,11 +104,11 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         host.addSubview(grip)
         panel.contentView = host
         web.loadFileURL(HUDResources.root.appendingPathComponent("index.html"),allowingReadAccessTo:HUDResources.root)
-        bubble = NSPanel(contentRect:NSRect(x:32,y:180,width:64,height:64),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
+        bubble = NSPanel(contentRect:NSRect(x:32,y:180,width:side,height:side),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
         configure(bubble); bubble.title = "Herdr HUD H Button"; bubble.level = NSWindow.Level(rawValue:panel.level.rawValue+1)
-        bubbleView = BubbleView(frame:NSRect(x:0,y:0,width:64,height:64)); bubbleView.app = self
+        bubbleView = BubbleView(frame:NSRect(x:0,y:0,width:side,height:side)); bubbleView.app = self
         bubbleView.setAccessibilityRole(.button); bubbleView.setAccessibilityLabel("Herdr HUD. Click to open agents; drag to move.")
-        bubble.contentView = bubbleView
+        bubble.contentView = bubbleView; applyOpacity()
         restorePosition()
         status = NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
         status.button?.title = "H"; status.button?.toolTip = "Herdr HUD"
@@ -132,13 +137,8 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         let menu = NSMenu()
         menu.addItem(menuItem("Open / close agents",#selector(togglePanel)))
         menu.addItem(menuItem("Show / hide H button",#selector(toggleVisibility)))
-        let opacityItem = menuItem("Herdr HUD transparency",#selector(opacityDragged(_:)))
-        let slider = NSSlider(value:opacity,minValue:30,maxValue:100,target:self,action:#selector(opacityDragged(_:)))
-        slider.frame = NSRect(x:14,y:2,width:190,height:22); slider.isContinuous = true
-        slider.toolTip = "Panel opacity. 100% is fully opaque."
-        let holder = NSView(frame:NSRect(x:0,y:0,width:218,height:26)); holder.addSubview(slider)
-        opacityItem.view = holder; opacityItem.title = ""; menu.addItem(opacityItem)
-        let label = menuItem("\(Int(opacity))% opacity",#selector(noop)); label.isEnabled = false; menu.addItem(label); opacityLabel = label
+        menu.addItem(submenu("H icon transparency",[("100%",100),("85%",85),("70%",70),("55%",55),("40%",40),("30%",30)],#selector(changeOpacity(_:)),current:Int(bubbleOpacity)))
+        menu.addItem(submenu("H button size",[("Small · 48 px",48),("Medium · 64 px",64),("Large · 88 px",88),("Extra large · 112 px",112)],#selector(changeBubbleSize(_:)),current:Int(side)))
         menu.addItem(.separator())
         let root = NSMenuItem(title:"Keyboard shortcuts",action:nil,keyEquivalent:""), submenu = NSMenu()
         for (index,title) in ["⌘⌥H panel · ⌘⌥⇧H hide", "⌃⌥H panel · ⌃⌥⇧H hide", "Shortcuts off"].enumerated() {
@@ -152,6 +152,13 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         status.menu = menu
     }
     @objc func changeShortcut(_ item: NSMenuItem) { defaults.set(item.tag,forKey:"shortcutMode"); registerHotkeys() }
+    func submenu(_ title: String, _ choices: [(String,Int)], _ action: Selector, current: Int) -> NSMenuItem {
+        let root = NSMenuItem(title:title,action:nil,keyEquivalent:""), sub = NSMenu()
+        for (label,tag) in choices {
+            let item = menuItem(label,action); item.tag = tag; item.state = tag == current ? .on : .off; sub.addItem(item)
+        }
+        root.submenu = sub; return root
+    }
     func registerHotkeys() {
         for key in hotkeys { UnregisterEventHotKey(key) }; hotkeys = []
         if handler == nil {
@@ -183,7 +190,6 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
             item.state = SMAppService.mainApp.status == .enabled ? .on : .off
         } catch { emit("notice",["message":"Login startup could not be enabled: " + error.localizedDescription]); openPanel() }
     }
-    @objc func noop() {}
     @objc func about() { openPanel(); emit("notice",["message":"Herdr HUD · Mac preview 0.1.0 · MIT · Community project, not affiliated with Herdr or Basecamp. Configure machines in Herdr; they appear here automatically."]) }
     @objc func quit() { NSApp.terminate(nil) }
     @objc func toggleVisibility() {
@@ -203,11 +209,11 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func restorePosition() {
         guard let screen = NSScreen.screens.first(where: { screenKey($0) == defaults.string(forKey:"lastScreen") }) ?? NSScreen.screens.first else { return }
         let point = defaults.string(forKey:"position." + screenKey(screen)).map(NSPointFromString) ?? NSPoint(x:32,y:180)
-        bubble.setFrameOrigin(NSPoint(x:screen.frame.minX+min(max(point.x,4),screen.frame.width-68),y:screen.frame.minY+min(max(point.y,4),screen.frame.height-68)))
+        bubble.setFrameOrigin(NSPoint(x:screen.frame.minX+min(max(point.x,4),screen.frame.width-side-4),y:screen.frame.minY+min(max(point.y,4),screen.frame.height-side-4)))
     }
     func savePosition() {
         let screen = screenForBubble(); let frame = screen.frame
-        let point = NSPoint(x:min(max(bubble.frame.minX-frame.minX,4),frame.width-68),y:min(max(bubble.frame.minY-frame.minY,4),frame.height-68))
+        let point = NSPoint(x:min(max(bubble.frame.minX-frame.minX,4),frame.width-side-4),y:min(max(bubble.frame.minY-frame.minY,4),frame.height-side-4))
         defaults.set(NSStringFromPoint(point),forKey:"position." + screenKey(screen)); defaults.set(screenKey(screen),forKey:"lastScreen")
         bubble.setFrameOrigin(NSPoint(x:frame.minX+point.x,y:frame.minY+point.y)); positionPanel(); diagnostics()
     }
@@ -274,7 +280,6 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
         hideToast()
         let window = NSPanel(contentRect:NSRect(x:0,y:0,width:320,height:92),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
         configure(window); window.title = "Herdr HUD Alert"
-        window.alphaValue = CGFloat(opacity/100)
         window.level = NSWindow.Level(rawValue:bubble.level.rawValue+1)
         let view = ToastView(frame:NSRect(x:0,y:0,width:320,height:92)); view.app = self; view.agentID = data["id"] as? String ?? ""
         view.title = data["title"] as? String ?? "Agent update"; view.detail = data["preview"] as? String ?? "Click to read the response"
@@ -289,7 +294,7 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func hideToast() { toastTimer?.invalidate(); toast?.orderOut(nil); toast = nil; toastHover = false }
     func diagnostics() {
         guard bubble != nil else { return }
-        let data: Row = ["pid":ProcessInfo.processInfo.processIdentifier,"visible":visible,"panelOpen":panelOpen,"screens":NSScreen.screens.count,"panelKey":panel.isKeyWindow,"resourceRoot":HUDResources.root.path,"bubbleFrame":NSStringFromRect(bubble.frame),"panelFrame":NSStringFromRect(panel.frame),"opacity":opacity,"machines":lastSnapshot["machines"] ?? [],"agentCount":(lastSnapshot["agents"] as? [Row])?.count ?? 0,"shortcutWarning":hotkeyWarning]
+        let data: Row = ["pid":ProcessInfo.processInfo.processIdentifier,"visible":visible,"panelOpen":panelOpen,"screens":NSScreen.screens.count,"panelKey":panel.isKeyWindow,"resourceRoot":HUDResources.root.path,"bubbleFrame":NSStringFromRect(bubble.frame),"panelFrame":NSStringFromRect(panel.frame),"bubbleOpacity":bubbleOpacity,"machines":lastSnapshot["machines"] ?? [],"agentCount":(lastSnapshot["agents"] as? [Row])?.count ?? 0,"shortcutWarning":hotkeyWarning]
         try? encode(data).write(to:support.appendingPathComponent("diagnostics.json"),atomically:true,encoding:.utf8)
     }
     @objc func control(_ notification: Notification) {
