@@ -74,9 +74,12 @@ run the packaged app. Xcode command-line tools are needed to build from source.
 - **Enter:** send a prompt to the selected ready agent.
 - **Control–Enter or Shift–Enter:** insert a new line (Command/Option–Enter also insert a new line).
 - The **H menu-bar item** has visibility, alternative shortcuts, launch-at-login,
-  refresh, and quit controls. Login startup is off by default and remains unverified.
+  a panel transparency slider (30–100%), refresh, and quit controls. Login startup
+  is off by default and remains unverified.
 - Drag the roster divider to resize it. Visibility, position, view, and divider
   width are remembered. Prompt drafts are kept per agent while the app runs.
+- Drag the grip in the panel's bottom-right corner to resize the whole panel; the
+  size and transparency are remembered across launches.
 - Agents needing attention sort first, then working agents, then read idle agents.
 - Silent alerts appear above H (below it near the top edge) after an agent finishes or needs input. Hover to
   retain one, click to open its agent, or dismiss it. The attention badge remains.
