@@ -71,6 +71,7 @@ run the packaged app. Xcode command-line tools are needed to build from source.
 - **Command–Option–H:** toggle the agent panel.
 - **Command–Option–Shift–H:** hide or restore the whole HUD.
 - **Escape:** close the panel while keeping H visible.
+- **Double-click an agent:** focus it in Herdr and bring its terminal to the front.
 - **Enter:** send a prompt to the selected ready agent.
 - **Control–Enter or Shift–Enter:** insert a new line (Command/Option–Enter also insert a new line).
 - The **H menu-bar item** has visibility, alternative shortcuts, launch-at-login,

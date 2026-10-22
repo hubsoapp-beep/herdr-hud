@@ -115,6 +115,13 @@ final class HerdrClient {
         let (machine, row) = try resolve(id)
         return ["id":id, "provider":row["agent"] ?? "", "text":try call(machine, ["agent", "read", row["pane_id"] as! String, "--source", "recent-unwrapped", "--lines", "180"])]
     }
+    func focus(_ id: String) throws -> Row {
+        let (machine, row) = try resolve(id)
+        let raw = try call(machine, ["agent", "focus", row["pane_id"] as! String])
+        guard let data = raw.data(using: .utf8), let response = try? JSONSerialization.jsonObject(with: data) as? Row,
+              (response["result"] as? Row)?["type"] as? String == "agent_info" else { throw HUDError("Herdr did not confirm the focus change.") }
+        return ["ok": true, "id": id]
+    }
     func prompt(_ id: String, _ message: String) throws -> Row {
         guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, message.utf8.count <= 60000, !message.contains("\0"), !message.hasPrefix("-") else { throw HUDError("Enter a prompt under 60 KB that does not start with a dash.") }
         let (machine, row) = try resolve(id)

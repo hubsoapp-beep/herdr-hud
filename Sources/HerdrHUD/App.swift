@@ -257,6 +257,15 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
                 }
             }
         case "alert": if !panelOpen && visible { showToast(data) }
+        case "focus":
+            guard let id = data["id"] as? String else { return }
+            work.async {
+                var message = ""
+                do { _ = try self.client.focus(id) } catch { message = error.localizedDescription }
+                DispatchQueue.main.async {
+                    if message.isEmpty { self.closePanel(); self.activateTerminal() } else { self.emit("notice",["message":message]) }
+                }
+            }
         case "output", "prompt":
             guard let id = data["id"] as? String, !requestID.isEmpty, panelOpen else { return }
             if operation == "output" { if readBusy { return }; readBusy = true; selected = id }
@@ -290,6 +299,12 @@ final class HUDApp: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKN
     func positionToast() {
         guard let toast = toast, bubble != nil, !NSScreen.screens.isEmpty else { return }
         toast.setFrame(notificationFrame(bubble:bubble.frame,size:toast.frame.size,visibleFrame:screenForBubble().visibleFrame),display:true)
+    }
+    func activateTerminal() {
+        // Herdr runs inside a terminal; bring the host window to the front.
+        for id in ["com.mitchellh.ghostty","com.googlecode.iterm2","net.kovidgoyal.kitty","com.github.wez.wezterm","org.alacritty","dev.warp.Warp-Stable","com.apple.Terminal","io.cmux.cmux"] {
+            if let app = NSRunningApplication.runningApplications(withBundleIdentifier:id).first { app.activate(options:[]); return }
+        }
     }
     func hideToast() { toastTimer?.invalidate(); toast?.orderOut(nil); toast = nil; toastHover = false }
     func diagnostics() {

@@ -15,7 +15,7 @@ function renderRoster(){
   const items=HUDModel.sorted(agents,unread).filter(a=>`${name(a)} ${a.workspace_label} ${a.machine_label} ${a.agent}`.toLowerCase().includes(filter));
   roster.replaceChildren(...items.map(a=>{const button=el('button',undefined,'agent'+(a.id===selected?' selected':'')+(!a.online?' offline':''));button.setAttribute('aria-pressed',String(a.id===selected));
     const title=el('div',undefined,'agent-title');title.append(el('span',undefined,'dot '+(a.agent_status==='working'?'busy':a.agent_status==='blocked'||unread.has(a.id)?'attention':'')),el('span',name(a)));button.append(title);
-    const meta=el('div',undefined,'agent-meta');meta.append(el('div',a.workspace_label||a.workspace_id),el('div',a.machine_label+' · '+(a.agent||'agent')),el('div',a.online?a.agent_status:'Offline','agent-state'));button.append(meta);const metadata=HUDModel.parse(outputs.get(a.id)?.text||'',a.agent);button.title=metadata.model?`${metadata.model} ${metadata.reasoning}`:a.pane_id;button.onclick=()=>select(a.id);return button;}));
+    const meta=el('div',undefined,'agent-meta');meta.append(el('div',a.workspace_label||a.workspace_id),el('div',a.machine_label+' · '+(a.agent||'agent')),el('div',a.online?a.agent_status:'Offline','agent-state'));button.append(meta);const metadata=HUDModel.parse(outputs.get(a.id)?.text||'',a.agent);button.title=metadata.model?`${metadata.model} ${metadata.reasoning}`:a.pane_id;button.onclick=()=>select(a.id);button.ondblclick=()=>{select(a.id);request('focus',{id:a.id});};return button;}));
   if(!items.length)roster.append(el('p',agents.length?'No matching agents.':'No agents found. Start an agent in Herdr.','empty'));roster.scrollTop=scroll;
 }
 function select(id){
